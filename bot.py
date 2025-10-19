@@ -1,81 +1,56 @@
-import os
-import textwrap
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+import os
 
+# ========== CONFIG ==========
+BOT_TOKEN = "8388314171:AAFXrRKZU0d7XMRP5sRNi89ixXXzYGo0_Ws"
+FONT_PATH = "QEAntonyLark.ttf"
+FONT_SIZE = 72
+MARGIN_LEFT = 250
+MARGIN_TOP = 300
+LINE_SPACING = 120
 
-# ==========================
-# ✍️ A4 Handwriting Generator (Auto Line Break + Black Ink)
-# ==========================
-def text_to_handwritten_page(text):
-    # Create A4 page
-    width, height = 1240, 1754  # A4
-    img = Image.new("RGB", (width, height), color=(255, 255, 240))
-    draw = ImageDraw.Draw(img)
+# ========== FUNCTION TO GENERATE HANDWRITTEN IMAGE ==========
+def generate_handwritten_image(text):
+    # Create blank white A4 page
+    page_width, page_height = 2480, 3508
+    page = Image.new("RGB", (page_width, page_height), "white")
+    draw = ImageDraw.Draw(page)
+    font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-    # Ruled lines
-    top_margin = 180
-    line_gap = 80
-    for y in range(top_margin, height - 150, line_gap):
-        draw.line((100, y, width - 100, y), fill=(200, 220, 255), width=2)
+    # Split text into lines respecting user-entered newlines
+    lines = text.splitlines()
 
-    # Font setup
-    font_path = "fonts/Kalam-Regular.ttf"
-    if not os.path.exists(font_path):
-        font = ImageFont.truetype("arial.ttf", 46)
-    else:
-        font = ImageFont.truetype(font_path, 46)
-
-    # Auto-wrap text
-    wrapper = textwrap.TextWrapper(width=60)  # 60 chars per line (auto line break)
-    lines = wrapper.wrap(text)
-
-    # Start position
-    x, y = 140, top_margin - 40
-
+    x, y = MARGIN_LEFT, MARGIN_TOP
     for line in lines:
-        draw.text((x, y), line, font=font, fill=(0, 0, 0))  # black ink
-        y += line_gap
+        # Wrap each logical line separately
+        wrapped_lines = textwrap.wrap(line, width=40)
+        if not wrapped_lines:
+            # Empty line (user pressed Enter twice)
+            y += LINE_SPACING
+        for subline in wrapped_lines:
+            draw.text((x, y), subline, font=font, fill=(0, 0, 0))
+            y += LINE_SPACING
 
-        # Safety: stop if page end reached
-        if y > height - 200:
-            break
-
-    # Slight contrast for natural pen look
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.15)
-
-    output_path = "handwritten_auto.jpg"
-    img.save(output_path, quality=95)
+    output_path = "handwritten_output.jpg"
+    page.save(output_path, "JPEG")
     return output_path
 
+# ========== BOT HANDLER ==========
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    await update.message.reply_text("🖋 Writing your text neatly on an A4 page...")
+    image_path = generate_handwritten_image(text)
+    await update.message.reply_photo(photo=open(image_path, "rb"))
 
-# ==========================
-# 🤖 Telegram Bot Handlers
-# ==========================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🖋️ Send me your text — I'll neatly write it on an A4 notebook page automatically (no \\n needed)."
-    )
+# ========== MAIN ==========
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    print("✅ Bot is running...")
+    app.run_polling()
 
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    await update.message.reply_text("✍️ Writing your text neatly on an A4 page...")
-
-    output = text_to_handwritten_page(user_text)
-    await update.message.reply_photo(photo=open(output, "rb"))
-
-
-# ==========================
-# 🚀 Run the Bot
-# ==========================
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-print("✅ A4 Handwriting Bot (Auto Line Break) Running...")
-app.run_polling()
+if __name__ == "__main__":
+    main()
